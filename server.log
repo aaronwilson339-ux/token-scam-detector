@@ -1,0 +1,7 @@
+
+> token-scam-detector@1.0.0 start
+> node server.js
+
+🚀 Token Scam Detector API running on http://localhost:3001
+📚 Docs available at http://localhost:3001/docs
+Terminated
