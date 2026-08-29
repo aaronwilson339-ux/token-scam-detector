@@ -47,39 +47,117 @@ app.use((req, res, next) => {
 });
 
 // ============================================
-// API KEY AUTHENTICATION
+// ACCESS CONTROL: x402 PAYMENT + OWNER API KEY
 // ============================================
+//
+// Two ways to reach a paid endpoint:
+//   1. Pay per call via x402 (this is how AI agents buy access)
+//   2. Send the owner's API key (so you can test without paying yourself)
+//
+// /health and /docs stay open to everyone - marketplaces and agents need
+// to read them before they can decide to buy anything.
 
-// Public endpoints that don't need API key
 const publicRoutes = ['/health', '/docs'];
 
+// x402 config. Everything comes from environment variables so no wallet
+// address or credential is ever committed to the repository.
+const X402_PAY_TO = process.env.X402_PAY_TO;              // your receiving wallet
+const X402_PRICE = process.env.X402_PRICE || '$0.01';     // price per call
+const X402_ENV = process.env.X402_ENV || 'development';   // development = testnet
+const X402_NETWORK = process.env.X402_NETWORK ||
+  (X402_ENV === 'production' ? 'eip155:8453' : 'eip155:84532'); // Base / Base Sepolia
+
+const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze'];
+
+// Holds the x402 middleware once it finishes initializing. Stays null if
+// x402 is not configured, in which case the API key is the only way in.
+let x402Middleware = null;
+let x402Status = 'not configured';
+
+// Step 1: owner bypass. A valid API key skips payment entirely.
 app.use((req, res, next) => {
-  // Skip authentication for public routes
   if (publicRoutes.includes(req.path)) {
     return next();
   }
 
-  // Refuse to serve protected routes if no key was ever configured.
-  // This is deliberate: an unset key would otherwise leave the API wide open.
+  const key = req.headers['x-api-key'];
+  if (API_KEY && key && key === API_KEY) {
+    req.ownerBypass = true;
+    return next();
+  }
+
+  // No valid key. If x402 is live, let the payment layer handle this request.
+  if (x402Middleware) {
+    return next();
+  }
+
+  // Neither payment nor a key is available - fall back to the old behaviour.
   if (!API_KEY) {
-    console.error('[SECURITY] API_KEY is not set - refusing protected requests.');
+    console.error('[SECURITY] No API_KEY and no x402 - refusing protected requests.');
     return res.status(503).json({
       error: 'Service not configured',
-      message: 'This API has no API_KEY set. The owner must add an API_KEY config var.'
+      message: 'This API has neither an API_KEY nor x402 payment configured.'
     });
   }
 
-  // Check API key for protected routes
-  const key = req.headers['x-api-key'];
-  if (!key || key !== API_KEY) {
-    console.warn(`[SECURITY] Unauthorized access attempt to ${req.path}`);
-    return res.status(401).json({
-      error: 'Unauthorized - Missing or invalid API key',
-      hint: 'Include header: X-API-Key: your-key'
-    });
-  }
-  next();
+  console.warn(`[SECURITY] Unauthorized access attempt to ${req.path}`);
+  return res.status(401).json({
+    error: 'Unauthorized - Missing or invalid API key',
+    hint: 'Include header: X-API-Key: your-key, or pay per call via x402'
+  });
 });
+
+// Step 2: payment gate. Delegates to x402 once it has initialized.
+app.use((req, res, next) => {
+  if (req.ownerBypass || !x402Middleware) {
+    return next();
+  }
+  if (publicRoutes.includes(req.path)) {
+    return next();
+  }
+  return x402Middleware(req, res, next);
+});
+
+// Initialize x402 in the background. This deliberately never throws: if the
+// credentials are missing or Coinbase is unreachable, the server still boots
+// and keeps serving on the API key rather than taking the whole API down.
+async function initX402() {
+  if (!X402_PAY_TO) {
+    x402Status = 'not configured (X402_PAY_TO is not set)';
+    return;
+  }
+  if (!process.env.CDP_API_KEY_ID || !process.env.CDP_API_KEY_SECRET) {
+    x402Status = 'not configured (CDP_API_KEY_ID / CDP_API_KEY_SECRET missing)';
+    return;
+  }
+
+  try {
+    const { createX402Server } = require('@coinbase/cdp-sdk/x402');
+    const { paymentMiddlewareFromHTTPServer } = require('@x402/express');
+
+    const routes = {};
+    for (const route of PAID_ROUTES) {
+      routes[`POST ${route}`] = {
+        price: X402_PRICE,
+        networks: [X402_NETWORK],
+        description: 'Smart contract scam and honeypot risk analysis'
+      };
+    }
+
+    const server = await createX402Server({
+      environment: X402_ENV,
+      payToConfig: { type: 'address', evm: X402_PAY_TO },
+      routes
+    });
+
+    x402Middleware = paymentMiddlewareFromHTTPServer(server);
+    x402Status = `live (${X402_PRICE} per call on ${X402_NETWORK})`;
+    console.log(`✅ x402 payments enabled: ${x402Status}`);
+  } catch (err) {
+    x402Status = `failed to start (${err.message})`;
+    console.error(`[x402] Initialization failed, continuing without payments: ${err.message}`);
+  }
+}
 
 // ============================================
 // SCAM DETECTION LOGIC
@@ -307,6 +385,7 @@ app.get('/health', (req, res) => {
     status: 'API is running',
     version: '1.0.0',
     environment: NODE_ENV,
+    payments: x402Status,
     timestamp: new Date().toISOString()
   });
 });
@@ -457,9 +536,14 @@ app.get('/docs', (req, res) => {
         }
       }
     },
-    pricing: {
-      per_analysis: '$0.01 USDC',
-      model: 'Pay-per-use on Agentic Market'
+    payment: {
+      protocol: 'x402',
+      price: X402_PRICE,
+      currency: 'USDC',
+      network: X402_NETWORK,
+      status: x402Status,
+      paidRoutes: PAID_ROUTES,
+      howItWorks: 'Call a paid route with no payment to receive an HTTP 402 response containing payment details, then retry with a signed payment authorization.'
     },
     disclaimer: 'This API analyzes contracts for common scam patterns. It is NOT a guarantee of safety. Always DYOR.'
   };
@@ -492,6 +576,11 @@ app.listen(PORT, () => {
   console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
   console.log(`🔒 Environment: ${NODE_ENV}`);
   console.log(`⚠️  API Key Authentication: ${API_KEY ? 'Enabled' : 'NOT CONFIGURED - set the API_KEY config var!'}`);
+  console.log(`💰 x402 payments: ${x402Status}`);
+
+  // Kick off payment setup after the server is already accepting requests,
+  // so a slow or failed handshake can never stop the API from starting.
+  initX402();
   console.log('\n--- SECURITY INFO ---');
   console.log('✅ Rate limiting: 100 requests per 15 minutes');
   console.log('✅ Input validation: Enabled');
