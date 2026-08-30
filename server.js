@@ -164,6 +164,21 @@ async function initX402() {
       throw new Error(`facilitator unreachable (HTTP ${probe.status})`);
     }
 
+    // Reachable is not enough - the facilitator must actually settle on OUR
+    // network. The public facilitator is testnet-only, so switching to mainnet
+    // without changing facilitator would otherwise fail confusingly at the
+    // first real payment instead of loudly at boot.
+    const supported = await probe.json();
+    const kinds = Array.isArray(supported?.kinds) ? supported.kinds : [];
+    const networks = [...new Set(kinds.map(k => k?.network).filter(Boolean))];
+    if (networks.length && !networks.includes(X402_NETWORK)) {
+      throw new Error(
+        `facilitator does not support ${X402_NETWORK}. ` +
+          `It supports: ${networks.join(', ')}. ` +
+          'Point X402_FACILITATOR_URL at one that settles on your network.'
+      );
+    }
+
     const facilitatorClient = new HTTPFacilitatorClient({ url: X402_FACILITATOR_URL });
     const resourceServer = new x402ResourceServer(facilitatorClient)
       .register(X402_NETWORK, new ExactEvmScheme());
