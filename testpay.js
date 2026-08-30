@@ -23,7 +23,10 @@ const API_URL =
   process.env.TEST_API_URL ||
   'https://token-scam-detector-80cff4df0237.herokuapp.com/analyze';
 
-const NETWORK = process.env.X402_NETWORK || 'eip155:84532'; // Base Sepolia
+// Must match what the server is running, or the payment targets the wrong
+// chain. genkey.js derives this identically.
+const NETWORK = process.env.X402_NETWORK ||
+  (process.env.X402_ENV === 'production' ? 'eip155:8453' : 'eip155:84532');
 
 function fail(message, hint) {
   console.error(`\n\u274c ${message}`);
