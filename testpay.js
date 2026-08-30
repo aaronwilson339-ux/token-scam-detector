@@ -33,7 +33,7 @@ function fail(message, hint) {
 
 let wallet;
 try {
-  wallet = getTestWallet();
+  wallet = getTestWallet(NETWORK);
 } catch (err) {
   fail(err.message, 'Run "node genkey.js" first to see the wallet address.');
 }
