@@ -78,6 +78,15 @@ const X402_FACILITATOR_URL =
 
 const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze'];
 
+// Descriptions agents read before deciding to buy. These are deliberately
+// explicit about the limitation - source code is required - because a buyer
+// who discovers that after paying asks for a refund.
+const ROUTE_DESCRIPTIONS = {
+  '/analyze': 'Scans verified Solidity source for honeypot, rug-pull and ownership risk patterns. Returns a 0-100 risk score with the specific factors found. Requires verified source code; cannot analyze unverified contracts.',
+  '/quick-check': 'Fast scam / not-scam verdict on verified Solidity source, with a severity level. Requires verified source code.',
+  '/batch-analyze': 'Analyzes up to 50 contracts in one call. Requires verified Solidity source for each.'
+};
+
 // Holds the x402 middleware once it finishes initializing. Stays null if
 // x402 is not configured, in which case the API key is the only way in.
 let x402Middleware = null;
@@ -140,6 +149,10 @@ async function initX402() {
     const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
     const { ExactEvmScheme } = require('@x402/evm/exact/server');
     const { HTTPFacilitatorClient } = require('@x402/core/server');
+    const {
+      bazaarResourceServerExtension,
+      declareDiscoveryExtension
+    } = require('@x402/extensions/bazaar');
 
     // Preflight: confirm the facilitator actually answers before we put it in
     // the request path. Without this, an unreachable facilitator turns every
@@ -155,6 +168,10 @@ async function initX402() {
     const resourceServer = new x402ResourceServer(facilitatorClient)
       .register(X402_NETWORK, new ExactEvmScheme());
 
+    // The Bazaar extension is what makes this endpoint discoverable. Without
+    // it the API works but no agent can find it, so it earns nothing.
+    resourceServer.registerExtension(bazaarResourceServerExtension);
+
     const routes = {};
     for (const route of PAID_ROUTES) {
       routes[`POST ${route}`] = {
@@ -164,7 +181,63 @@ async function initX402() {
           network: X402_NETWORK,
           payTo: X402_PAY_TO
         },
-        description: 'Smart contract scam and honeypot risk analysis'
+        description: ROUTE_DESCRIPTIONS[route],
+        mimeType: 'application/json',
+        extensions: {
+          ...declareDiscoveryExtension({
+            bodyType: 'json',
+            input: {
+              contractAddress: '0x1234567890123456789012345678901234567890',
+              contractCode: 'pragma solidity ^0.8.0; contract MyToken { ... }',
+              chain: 'ethereum'
+            },
+            inputSchema: {
+              properties: {
+                contractAddress: {
+                  type: 'string',
+                  description: 'The token contract address being analyzed'
+                },
+                contractCode: {
+                  type: 'string',
+                  description: 'Verified Solidity source code of the contract. Source is required - bytecode-only (unverified) contracts cannot be analyzed.'
+                },
+                chain: {
+                  type: 'string',
+                  description: 'Chain name, e.g. ethereum, bsc, solana. Optional, defaults to ethereum.'
+                }
+              },
+              required: ['contractAddress', 'contractCode']
+            },
+            output: {
+              example: {
+                contractAddress: '0x1234567890123456789012345678901234567890',
+                chain: 'ethereum',
+                isLikely_Scam: true,
+                riskScore: 100,
+                severity: 'CRITICAL',
+                riskFactors: [
+                  'Uncontrolled mint function detected',
+                  'Sell amount restrictions detected (honeypot indicator)'
+                ],
+                recommendation: 'HIGH RISK: This token shows multiple scam indicators.',
+                disclaimer: 'Pattern analysis of source code only. Not a guarantee of safety.'
+              },
+              schema: {
+                type: 'object',
+                properties: {
+                  contractAddress: { type: 'string' },
+                  chain: { type: 'string' },
+                  isLikely_Scam: { type: 'boolean' },
+                  riskScore: { type: 'number' },
+                  severity: { type: 'string' },
+                  riskFactors: { type: 'array', items: { type: 'string' } },
+                  recommendation: { type: 'string' },
+                  disclaimer: { type: 'string' }
+                }
+              }
+            }
+          })
+        }
       };
     }
 
