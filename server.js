@@ -6,6 +6,11 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
+
+// Heroku (and most hosts) run the app behind a reverse proxy. Express needs to
+// be told, or express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and
+// cannot identify real client IPs. '1' = trust exactly one proxy hop.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.API_KEY;
 const NODE_ENV = process.env.NODE_ENV || 'development';

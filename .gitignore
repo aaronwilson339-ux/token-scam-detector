@@ -13,3 +13,11 @@ build/
 .env.*.local
 *.swp
 *.swo
+
+# Credentials - never commit these
+cdp_api_key*.json
+*api_key*.json
+*_key.json
+*.pem
+*.key
+secrets/
