@@ -71,6 +71,10 @@ const X402_PRICE = process.env.X402_PRICE || '$0.01';     // price per call
 const X402_ENV = process.env.X402_ENV || 'development';   // development = testnet
 const X402_NETWORK = process.env.X402_NETWORK ||
   (X402_ENV === 'production' ? 'eip155:8453' : 'eip155:84532'); // Base / Base Sepolia
+// The facilitator verifies and settles payments. The public one needs no
+// credentials, which is what makes testnet possible without a CDP account.
+const X402_FACILITATOR_URL =
+  process.env.X402_FACILITATOR_URL || 'https://x402.org/facilitator';
 
 const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze'];
 
@@ -131,33 +135,44 @@ async function initX402() {
     x402Status = 'not configured (X402_PAY_TO is not set)';
     return;
   }
-  if (!process.env.CDP_API_KEY_ID || !process.env.CDP_API_KEY_SECRET) {
-    x402Status = 'not configured (CDP_API_KEY_ID / CDP_API_KEY_SECRET missing)';
-    return;
-  }
 
   try {
-    const { createX402Server } = require('@coinbase/cdp-sdk/x402');
-    const { paymentMiddlewareFromHTTPServer } = require('@x402/express');
+    const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
+    const { ExactEvmScheme } = require('@x402/evm/exact/server');
+    const { HTTPFacilitatorClient } = require('@x402/core/server');
+
+    // Preflight: confirm the facilitator actually answers before we put it in
+    // the request path. Without this, an unreachable facilitator turns every
+    // paid request into a 500 instead of falling back cleanly to the API key.
+    const probe = await fetch(`${X402_FACILITATOR_URL}/supported`, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!probe.ok) {
+      throw new Error(`facilitator unreachable (HTTP ${probe.status})`);
+    }
+
+    const facilitatorClient = new HTTPFacilitatorClient({ url: X402_FACILITATOR_URL });
+    const resourceServer = new x402ResourceServer(facilitatorClient)
+      .register(X402_NETWORK, new ExactEvmScheme());
 
     const routes = {};
     for (const route of PAID_ROUTES) {
       routes[`POST ${route}`] = {
-        price: X402_PRICE,
-        networks: [X402_NETWORK],
+        accepts: {
+          scheme: 'exact',
+          price: X402_PRICE,
+          network: X402_NETWORK,
+          payTo: X402_PAY_TO
+        },
         description: 'Smart contract scam and honeypot risk analysis'
       };
     }
 
-    const server = await createX402Server({
-      environment: X402_ENV,
-      payToConfig: { type: 'address', evm: X402_PAY_TO },
-      routes
-    });
-
-    x402Middleware = paymentMiddlewareFromHTTPServer(server);
+    x402Middleware = paymentMiddleware(routes, resourceServer);
     x402Status = `live (${X402_PRICE} per call on ${X402_NETWORK})`;
     console.log(`✅ x402 payments enabled: ${x402Status}`);
+    console.log(`   facilitator: ${X402_FACILITATOR_URL}`);
+    console.log(`   paid to: ${X402_PAY_TO}`);
   } catch (err) {
     x402Status = `failed to start (${err.message})`;
     console.error(`[x402] Initialization failed, continuing without payments: ${err.message}`);
