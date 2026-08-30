@@ -1,41 +1,45 @@
 /**
- * genkey.js — create a throwaway wallet for the one-off x402 test payment.
+ * genkey.js — show the address of your throwaway testnet payer wallet.
  *
- * This wallet exists only to send a single test-USDC payment to your own
- * endpoint, which is what triggers Bazaar indexing. It is NOT your real
- * wallet: fund it only from a testnet faucet, and delete it afterwards.
+ * The wallet is derived, not generated, so this prints the same address every
+ * time and you never have to copy a private key out of the Heroku console.
  *
  * Run:  node genkey.js
  */
 
-const { generatePrivateKey, privateKeyToAccount } = require('viem/accounts');
+const { getTestWallet } = require('./testwallet');
 
-const key = generatePrivateKey();
-const account = privateKeyToAccount(key);
+const line = '='.repeat(66);
 
-const line = '─'.repeat(64);
+try {
+  const { account, source } = getTestWallet();
 
-console.log('');
-console.log(line);
-console.log('  THROWAWAY TEST WALLET — testnet only, never send real funds');
-console.log(line);
-console.log('');
-console.log('  ADDRESS  (fund this at faucet.circle.com, Base Sepolia)');
-console.log(`  ${account.address}`);
-console.log('');
-console.log('  PRIVATE KEY  (paste into Heroku config var TEST_PAYER_KEY)');
-console.log(`  ${key}`);
-console.log('');
-console.log(line);
-console.log('');
-console.log('  Next steps:');
-console.log('   1. Copy the ADDRESS -> https://faucet.circle.com');
-console.log('      Choose "Base Sepolia" and request test USDC.');
-console.log('   2. Copy the PRIVATE KEY -> Heroku Settings -> Config Vars');
-console.log('      Name it exactly: TEST_PAYER_KEY');
-console.log('   3. Back here, run:  node testpay.js');
-console.log('   4. When it succeeds, DELETE the TEST_PAYER_KEY config var.');
-console.log('');
-console.log('  This key controls nothing but faucet tokens. Do not reuse it,');
-console.log('  and do not send real money to this address.');
-console.log('');
+  console.log('');
+  console.log(line);
+  console.log('  THROWAWAY TESTNET WALLET');
+  console.log(line);
+  console.log('');
+  console.log('  FUND THIS ADDRESS:');
+  console.log('');
+  console.log(`     ${account.address}`);
+  console.log('');
+  console.log(line);
+  console.log('');
+  console.log('  1. Go to https://faucet.circle.com');
+  console.log('  2. Choose network: Base Sepolia');
+  console.log('  3. Paste the address above, request test USDC');
+  console.log('  4. Come back here and run:   node testpay.js');
+  console.log('');
+  console.log(`  Key source: ${source}`);
+  console.log('');
+  console.log('  You do NOT need to copy a private key. testpay.js works out');
+  console.log('  the same wallet by itself.');
+  console.log('');
+  console.log('  TESTNET ONLY - never send real funds to this address.');
+  console.log('');
+} catch (err) {
+  console.error('');
+  console.error(`ERROR: ${err.message}`);
+  console.error('');
+  process.exit(1);
+}

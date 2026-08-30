@@ -17,38 +17,25 @@
 
 const { wrapFetchWithPaymentFromConfig } = require('@x402/fetch');
 const { ExactEvmScheme } = require('@x402/evm/exact/client');
-const { privateKeyToAccount } = require('viem/accounts');
+const { getTestWallet } = require('./testwallet');
 
 const API_URL =
   process.env.TEST_API_URL ||
   'https://token-scam-detector-80cff4df0237.herokuapp.com/analyze';
 
 const NETWORK = process.env.X402_NETWORK || 'eip155:84532'; // Base Sepolia
-const RAW_KEY = process.env.TEST_PAYER_KEY;
 
 function fail(message, hint) {
-  console.error(`\n❌ ${message}`);
+  console.error(`\n\u274c ${message}`);
   if (hint) console.error(`   ${hint}`);
   process.exit(1);
 }
 
-if (!RAW_KEY) {
-  fail(
-    'TEST_PAYER_KEY is not set.',
-    'Set it to your THROWAWAY test wallet private key, not your main wallet.'
-  );
-}
-
-// viem wants the 0x prefix; accept a key pasted either way.
-const PRIVATE_KEY = RAW_KEY.trim().startsWith('0x')
-  ? RAW_KEY.trim()
-  : `0x${RAW_KEY.trim()}`;
-
-if (!/^0x[0-9a-fA-F]{64}$/.test(PRIVATE_KEY)) {
-  fail(
-    'TEST_PAYER_KEY does not look like a private key.',
-    'Expected 64 hex characters, optionally prefixed with 0x.'
-  );
+let wallet;
+try {
+  wallet = getTestWallet();
+} catch (err) {
+  fail(err.message, 'Run "node genkey.js" first to see the wallet address.');
 }
 
 // A contract with obvious scam markers, so a successful call returns a
@@ -67,7 +54,7 @@ contract SuspiciousToken {
 };
 
 async function main() {
-  const account = privateKeyToAccount(PRIVATE_KEY);
+  const account = wallet.account;
 
   console.log('x402 test payment');
   console.log('─'.repeat(52));
