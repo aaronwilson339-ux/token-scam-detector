@@ -98,10 +98,16 @@ async function main() {
   }
 
   if (response.status === 402) {
+    const isMain = NETWORK === 'eip155:8453';
     fail(
       'Still 402 — the payment was not completed.',
-      'Usually means the payer wallet has no test USDC on Base Sepolia. ' +
-        'Fund ' + account.address + ' from a Base Sepolia USDC faucet.'
+      isMain
+        ? `The payer wallet has no USDC on Base mainnet. Send about $1 of ` +
+          `USDC on the BASE network (not Ethereum) to ${account.address}, ` +
+          'then run this again.'
+        : `The payer wallet has no test USDC on Base Sepolia. Fund ` +
+          `${account.address} at https://faucet.circle.com, choosing ` +
+          'Base Sepolia.'
     );
   }
 
