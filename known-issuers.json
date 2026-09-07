@@ -1,0 +1,45 @@
+{
+  "_readme": [
+    "Contracts and owner addresses belonging to identifiable, accountable issuers.",
+    "A match subtracts 50 points, because the question this scanner answers is",
+    "'how much must you trust someone, and who?' - and a named, regulated issuer",
+    "is a very different answer from an anonymous wallet holding the same powers.",
+    "",
+    "RULES FOR ADDING ENTRIES:",
+    "  1. Only add an address you have personally verified. This list LOWERS risk",
+    "     scores, so a wrong entry makes something dangerous look safe. That is the",
+    "     worst failure this tool can have.",
+    "  2. Record how you verified it in 'verifiedBy'. 'I think it is' is not a source.",
+    "  3. Prefer contract addresses over owner addresses. Block explorers label",
+    "     well-known contracts; the wallets that control them usually carry no label",
+    "     at all, so claiming one belongs to a company is normally a guess.",
+    "",
+    "LIMITATIONS, stated plainly:",
+    "  - Being a known issuer means accountable, not harmless. Circle can and does",
+    "    freeze USDC. The discount reflects who holds the power, not whether the",
+    "    power exists - the privileges are still listed in full.",
+    "  - Matching on owner cannot see role-based control. A contract can name a",
+    "    reputable owner while a separate role holder retains the dangerous powers.",
+    "  - Addresses differ per chain. An entry is scoped to the chain it names."
+  ],
+
+  "contracts": {
+    "base": {
+      "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {
+        "name": "USDC",
+        "issuer": "Circle",
+        "verifiedBy": "BaseScan labels this contract 'Circle', 'Stablecoin'; source verified as an exact match. Widely published as the canonical USDC address on Base.",
+        "note": "Regulated US issuer. Can mint, pause and blacklist, and has frozen wallets under legal order."
+      },
+      "0x4200000000000000000000000000000000000006": {
+        "name": "WETH",
+        "issuer": "Base (OP Stack predeploy)",
+        "verifiedBy": "Canonical OP Stack predeploy address, identical across OP Stack chains. Scan confirms no owner and no privileged functions.",
+        "note": "No owner, nothing to trust. Scores zero on its own merits; listed here for completeness."
+      }
+    }
+  },
+
+  "owners": {
+  }
+}

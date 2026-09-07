@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { analyzeBytecode } = require('./bytecode-analyzer');
 const { fetchContract, ChainError } = require('./chain');
+const { runScan } = require('./scan-core');
 require('dotenv').config();
 
 const app = express();
@@ -612,83 +613,6 @@ app.post('/batch-analyze', async (req, res) => {
 // It reports what the owner is ABLE to do rather than declaring "scam".
 // Plenty of legitimate tokens can mint; the defensible output is the list of
 // privileges and a score derived from them.
-
-/**
- * Shared by the paid route and the free demo, so the two can never drift
- * apart and start giving different answers for the same contract.
- */
-async function runScan(contractAddress, chain) {
-  const contract = await fetchContract(contractAddress, chain);
-  const analysis = analyzeBytecode(contract.bytecode);
-
-  const notes = [];
-  let score = analysis.riskScore;
-
-  // An upgradeable proxy means today's bytecode is not a promise about
-  // tomorrow's. That outranks anything found inside the current code.
-  if (contract.proxy.isProxy) {
-    score += 25;
-    notes.push(
-      'This is an upgradeable proxy. The code behind it can be replaced, so ' +
-      'these findings describe the implementation deployed right now and ' +
-      'nothing more.'
-    );
-  }
-
-  // If owner() really is the zero address, the privileges below cannot be
-  // used by an owner. Worth a lot - but not everything, because privileges
-  // can also be granted through roles that bytecode alone cannot reveal.
-  if (contract.owner.renounced && analysis.privileges.length > 0) {
-    score = Math.round(score * 0.3);
-    notes.push(
-      'Ownership is renounced (owner() returns the zero address), so the ' +
-      'privileges listed cannot be used by an owner. This does not rule out ' +
-      'other privileged roles.'
-    );
-  }
-
-  if (contract.owner.hasOwner && !contract.owner.renounced) {
-    notes.push(`Ownership is active. Owner: ${contract.owner.owner}`);
-  }
-
-  if (analysis.privileges.length === 0 && !contract.proxy.isProxy) {
-    notes.push(
-      'No owner privileges of the kinds this scanner recognises were found.'
-    );
-  }
-
-  if (score > 100) score = 100;
-  const severity =
-    score >= 70 ? 'CRITICAL' :
-    score >= 45 ? 'HIGH' :
-    score >= 25 ? 'MEDIUM' :
-    score >= 10 ? 'LOW' : 'MINIMAL';
-
-  return {
-    contractAddress: contract.address,
-    chain: contract.chain,
-    analysisMethod: 'bytecode',
-    contract: {
-      bytecodeSize: contract.bytecodeSize,
-      analyzedCodeAt: contract.bytecodeSource,
-      isUpgradeableProxy: contract.proxy.isProxy,
-      implementation: contract.proxy.implementation,
-      hasOwner: contract.owner.hasOwner,
-      owner: contract.owner.owner,
-      ownershipRenounced: contract.owner.renounced,
-      totalSupply: contract.totalSupply
-    },
-    ownerPrivileges: analysis.privileges,
-    riskScore: score,
-    severity,
-    notes,
-    disclaimer:
-      'This reports capabilities found in deployed bytecode. It is not a ' +
-      'verdict on intent, and cannot see off-chain factors such as who holds ' +
-      'the supply or whether liquidity is locked. Do your own research.',
-    timestamp: new Date().toISOString()
-  };
-}
 
 function handleScanError(error, res) {
   if (error instanceof ChainError) {

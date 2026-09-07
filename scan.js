@@ -13,8 +13,8 @@
  *   node scan.js 0x4200000000000000000000000000000000000006 base    (WETH)
  */
 
-const { fetchContract, ChainError, RPC_URLS } = require('./chain');
-const { analyzeBytecode } = require('./bytecode-analyzer');
+const { ChainError, RPC_URLS } = require('./chain');
+const { runScan } = require('./scan-core');
 
 const address = process.argv[2];
 const chain = process.argv[3] || 'base';
@@ -47,62 +47,51 @@ async function main() {
   console.log(RULE);
 
   const started = Date.now();
-  const contract = await fetchContract(address, chain);
-  const analysis = analyzeBytecode(contract.bytecode);
+  const r = await runScan(address, chain);
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
   console.log('');
   console.log('  CONTRACT');
-  console.log(`    bytecode size    ${contract.bytecodeSize.toLocaleString()} bytes`);
-  console.log(`    upgradeable      ${contract.proxy.isProxy ? 'YES - code can be replaced' : 'no'}`);
-  if (contract.proxy.isProxy) {
-    console.log(`    implementation   ${contract.proxy.implementation}`);
+  console.log(`    bytecode size    ${r.contract.bytecodeSize.toLocaleString()} bytes`);
+  console.log(`    upgradeable      ${r.contract.isUpgradeableProxy ? 'YES - code can be replaced' : 'no'}`);
+  if (r.contract.isUpgradeableProxy) {
+    console.log(`    implementation   ${r.contract.implementation}`);
   }
-  console.log(`    has owner()      ${contract.owner.hasOwner ? 'yes' : 'no'}`);
-  if (contract.owner.hasOwner) {
-    console.log(`    ownership        ${contract.owner.renounced ? 'RENOUNCED' : contract.owner.owner}`);
+  console.log(`    has owner()      ${r.contract.hasOwner ? 'yes' : 'no'}`);
+  if (r.contract.hasOwner) {
+    console.log(`    ownership        ${r.contract.ownershipRenounced ? 'RENOUNCED' : r.contract.owner}`);
   }
-  console.log(`    total supply     ${money(contract.totalSupply)}`);
-  console.log(`    selectors seen   ${analysis.selectorsFound} (${analysis.recognizedSelectors} recognised)`);
+  console.log(`    total supply     ${money(r.contract.totalSupply)}`);
+  if (r.knownIssuer) {
+    console.log(`    known issuer     ${r.knownIssuer.name} - ${r.knownIssuer.issuer}`);
+  }
 
   console.log('');
-  if (analysis.privileges.length === 0) {
+  if (r.ownerPrivileges.length === 0) {
     console.log('  OWNER PRIVILEGES');
     console.log('    none of the recognised kinds were found');
   } else {
-    console.log(`  OWNER PRIVILEGES  (${analysis.privileges.length})`);
-    for (const p of analysis.privileges) {
+    console.log(`  OWNER PRIVILEGES  (${r.ownerPrivileges.length})`);
+    for (const p of r.ownerPrivileges) {
       console.log(`    [${p.severity.toUpperCase().padEnd(8)}] ${p.capability}`);
       console.log(`               via ${p.sig || p.signature}  ${p.selector}`);
     }
   }
 
-  let score = analysis.riskScore;
-  const notes = [];
-  if (contract.proxy.isProxy) {
-    score += 25;
-    notes.push('Upgradeable: these findings describe only the code deployed right now.');
+  console.log('');
+  console.log('  HOW THE SCORE WAS REACHED');
+  for (const s of r.scoring) {
+    const sign = s.delta >= 0 ? '+' : '';
+    console.log(`    ${(sign + s.delta).padStart(5)}  ${s.reason}`);
   }
-  if (contract.owner.renounced && analysis.privileges.length > 0) {
-    score = Math.round(score * 0.3);
-    notes.push('Ownership renounced, so an owner cannot use the privileges above.');
-    notes.push('Other privileged roles may still exist; bytecode alone cannot rule them out.');
-  }
-  if (score > 100) score = 100;
-
-  const severity =
-    score >= 70 ? 'CRITICAL' :
-    score >= 45 ? 'HIGH' :
-    score >= 25 ? 'MEDIUM' :
-    score >= 10 ? 'LOW' : 'MINIMAL';
 
   console.log('');
   console.log(RULE);
-  console.log(`  RISK SCORE  ${score}/100   ${severity}`);
+  console.log(`  RISK SCORE  ${r.riskScore}/100   ${r.severity}`);
   console.log(RULE);
-  if (notes.length) {
+  if (r.notes.length) {
     console.log('');
-    for (const n of notes) console.log(`  note: ${n}`);
+    for (const n of r.notes) console.log(`  note: ${n}`);
   }
   console.log('');
   console.log(`  scanned in ${elapsed}s`);
