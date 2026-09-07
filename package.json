@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "verify-selectors": "node verify-selectors.js"
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",

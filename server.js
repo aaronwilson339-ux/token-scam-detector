@@ -3,6 +3,8 @@ const cors = require('cors');
 const axios = require('axios');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { analyzeBytecode } = require('./bytecode-analyzer');
+const { fetchContract, ChainError } = require('./chain');
 require('dotenv').config();
 
 const app = express();
@@ -76,7 +78,7 @@ const X402_NETWORK = process.env.X402_NETWORK ||
 const X402_FACILITATOR_URL =
   process.env.X402_FACILITATOR_URL || 'https://x402.org/facilitator';
 
-const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze'];
+const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze', '/scan'];
 
 // Descriptions agents read before deciding to buy. These are deliberately
 // explicit about the limitation - source code is required - because a buyer
@@ -84,7 +86,8 @@ const PAID_ROUTES = ['/analyze', '/quick-check', '/batch-analyze'];
 const ROUTE_DESCRIPTIONS = {
   '/analyze': 'Scans verified Solidity source for honeypot, rug-pull and ownership risk patterns. Returns a 0-100 risk score with the specific factors found. Requires verified source code; cannot analyze unverified contracts.',
   '/quick-check': 'Fast scam / not-scam verdict on verified Solidity source, with a severity level. Requires verified source code.',
-  '/batch-analyze': 'Analyzes up to 50 contracts in one call. Requires verified Solidity source for each.'
+  '/batch-analyze': 'Analyzes up to 50 contracts in one call. Requires verified Solidity source for each.',
+  '/scan': 'Reads a deployed contract directly from the chain and reports what its owner is able to do - mint, blacklist, pause, change fees, or replace the code entirely. Works on UNVERIFIED contracts because it analyzes bytecode, not source. Needs only an address.'
 };
 
 // Holds the x402 middleware once it finishes initializing. Stays null if
@@ -594,6 +597,114 @@ app.post('/batch-analyze', async (req, res) => {
     res.status(400).json({
       error: 'Batch analysis failed',
       message: NODE_ENV === 'development' ? error.message : 'Invalid input'
+    });
+  }
+});
+
+// ============================================
+// ON-CHAIN SCAN - works on UNVERIFIED contracts
+// ============================================
+//
+// The source-based endpoints above can only judge contracts whose Solidity
+// was published. Most scam tokens never publish theirs. This endpoint reads
+// the deployed bytecode instead, so it works on any contract that exists.
+//
+// It reports what the owner is ABLE to do rather than declaring "scam".
+// Plenty of legitimate tokens can mint; the useful, defensible output is the
+// list of privileges, and a score derived from them.
+
+app.post('/scan', async (req, res) => {
+  try {
+    const { contractAddress, chain = 'ethereum' } = req.body || {};
+
+    if (!contractAddress) {
+      return res.status(400).json({
+        error: 'Missing required field',
+        required: ['contractAddress'],
+        optional: { chain: 'ethereum | base | bsc | polygon | arbitrum' }
+      });
+    }
+
+    const contract = await fetchContract(contractAddress, chain);
+    const analysis = analyzeBytecode(contract.bytecode);
+
+    const notes = [];
+    let score = analysis.riskScore;
+
+    // An upgradeable proxy means today's bytecode is not a promise about
+    // tomorrow's. That outranks anything found inside the current code.
+    if (contract.proxy.isProxy) {
+      score += 25;
+      notes.push(
+        'This is an upgradeable proxy. The code behind it can be replaced, so ' +
+        'these findings describe the implementation deployed right now and ' +
+        'nothing more.'
+      );
+    }
+
+    // If owner() really is the zero address, the owner-only privileges below
+    // cannot be exercised by an owner. Worth a lot - but not everything,
+    // because a contract can grant privileges through roles other than owner().
+    if (contract.owner.renounced && analysis.privileges.length > 0) {
+      score = Math.round(score * 0.3);
+      notes.push(
+        'Ownership is renounced (owner() returns the zero address), so the ' +
+        'privileges listed cannot be used by an owner. Note this does not rule ' +
+        'out other privileged roles, which bytecode alone cannot fully reveal.'
+      );
+    }
+
+    if (contract.owner.hasOwner && !contract.owner.renounced) {
+      notes.push(`Ownership is active. Owner: ${contract.owner.owner}`);
+    }
+
+    if (analysis.privileges.length === 0 && !contract.proxy.isProxy) {
+      notes.push(
+        'No owner privileges of the kinds this scanner recognises were found ' +
+        'in the bytecode.'
+      );
+    }
+
+    if (score > 100) score = 100;
+    const severity =
+      score >= 70 ? 'CRITICAL' :
+      score >= 45 ? 'HIGH' :
+      score >= 25 ? 'MEDIUM' :
+      score >= 10 ? 'LOW' : 'MINIMAL';
+
+    res.json({
+      contractAddress: contract.address,
+      chain: contract.chain,
+      analysisMethod: 'bytecode',
+      contract: {
+        bytecodeSize: contract.bytecodeSize,
+        analyzedCodeAt: contract.bytecodeSource,
+        isUpgradeableProxy: contract.proxy.isProxy,
+        implementation: contract.proxy.implementation,
+        hasOwner: contract.owner.hasOwner,
+        owner: contract.owner.owner,
+        ownershipRenounced: contract.owner.renounced,
+        totalSupply: contract.totalSupply
+      },
+      ownerPrivileges: analysis.privileges,
+      riskScore: score,
+      severity,
+      notes,
+      disclaimer:
+        'This reports capabilities found in deployed bytecode. It is not a ' +
+        'verdict on intent, and cannot see off-chain factors such as who holds ' +
+        'the supply or whether liquidity is locked. Do your own research.',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    if (error instanceof ChainError) {
+      console.warn(`[SCAN] ${error.message}`);
+      return res.status(400).json({ error: 'Scan failed', message: error.message });
+    }
+    console.error(`[ERROR] Scan endpoint: ${error.message}`);
+    res.status(502).json({
+      error: 'Scan failed',
+      message: NODE_ENV === 'development' ? error.message : 'Could not read the contract from the chain'
     });
   }
 });
