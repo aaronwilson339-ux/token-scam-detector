@@ -31,47 +31,47 @@
  *   info     - worth knowing, not inherently adverse
  */
 const CAPABILITIES = [
-  { selector: '0x3659cfe6', sig: 'upgradeTo(address)', capability: 'Contract code can be replaced by the owner', severity: 'critical', points: 40 },
-  { selector: '0x4f1ef286', sig: 'upgradeToAndCall(address,bytes)', capability: 'Contract code can be replaced by the owner', severity: 'critical', points: 40 },
-  { selector: '0x404e5129', sig: 'blacklist(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x153b0d1e', sig: 'setBlacklist(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x44337ea1', sig: 'addToBlacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x0ecb93c0', sig: 'addBlackList(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x5cd8c072', sig: 'setBlackListed(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x8d1fdf2f', sig: 'freeze(address)', capability: 'Owner can freeze wallets', severity: 'critical', points: 30 },
-  { selector: '0xac869cd8', sig: 'setFrozen(address,bool)', capability: 'Owner can freeze wallets', severity: 'critical', points: 30 },
-  { selector: '0xb2a02ff1', sig: 'seize(address,address,uint256)', capability: 'Owner can seize holder tokens', severity: 'critical', points: 45 },
-  { selector: '0x79cc6790', sig: 'burnFrom(address,uint256)', capability: 'Tokens can be burned from a wallet by an approved party', severity: 'medium', points: 8 },
-  { selector: '0x8456cb59', sig: 'pause()', capability: 'Owner can pause all transfers', severity: 'critical', points: 25 },
-  { selector: '0x16c38b3c', sig: 'setPaused(bool)', capability: 'Owner can pause all transfers', severity: 'critical', points: 25 },
-  { selector: '0xc2e5ec04', sig: 'setTradingEnabled(bool)', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20 },
-  { selector: '0x8a8c523c', sig: 'enableTrading()', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20 },
-  { selector: '0x379ba1d9', sig: 'setTradingStatus(bool)', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20 },
-  { selector: '0x40c10f19', sig: 'mint(address,uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18 },
-  { selector: '0xa0712d68', sig: 'mint(uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18 },
-  { selector: '0x4e6ec247', sig: '_mint(address,uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18 },
-  { selector: '0x0b78f9c0', sig: 'setFees(uint256,uint256)', capability: 'Owner can change buy/sell fees', severity: 'medium', points: 12 },
-  { selector: '0x69fe0e2d', sig: 'setFee(uint256)', capability: 'Owner can change fees', severity: 'medium', points: 12 },
-  { selector: '0xc647b20e', sig: 'setTaxes(uint256,uint256)', capability: 'Owner can change taxes', severity: 'medium', points: 12 },
-  { selector: '0xdc1052e2', sig: 'setBuyTax(uint256)', capability: 'Owner can change buy tax', severity: 'medium', points: 12 },
-  { selector: '0x8cd09d50', sig: 'setSellTax(uint256)', capability: 'Owner can change sell tax', severity: 'medium', points: 15 },
-  { selector: '0xec28438a', sig: 'setMaxTxAmount(uint256)', capability: 'Owner can cap transaction size', severity: 'high', points: 18 },
-  { selector: '0x27a14fc2', sig: 'setMaxWalletAmount(uint256)', capability: 'Owner can cap wallet size', severity: 'medium', points: 12 },
-  { selector: '0x5d0044ca', sig: 'setMaxWallet(uint256)', capability: 'Owner can cap wallet size', severity: 'medium', points: 12 },
-  { selector: '0xdb2e21bc', sig: 'emergencyWithdraw()', capability: 'Owner can withdraw contract balance', severity: 'high', points: 20 },
-  { selector: '0x3ccfd60b', sig: 'withdraw()', capability: 'Owner can withdraw contract balance', severity: 'medium', points: 10 },
-  { selector: '0x57376198', sig: 'rescueTokens(address,uint256)', capability: 'Owner can remove tokens held by the contract', severity: 'medium', points: 10 },
-  { selector: '0x9e281a98', sig: 'withdrawToken(address,uint256)', capability: 'Owner can remove tokens held by the contract', severity: 'medium', points: 10 },
-  { selector: '0xf9f92be4', sig: 'blacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0xd01dd6d2', sig: 'setBlacklisted(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0x1a895266', sig: 'unBlacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30 },
-  { selector: '0xfe575a87', sig: 'isBlacklisted(address)', capability: 'Contract maintains a blacklist', severity: 'high', points: 20 },
-  { selector: '0x4e44d956', sig: 'configureMinter(address,uint256)', capability: 'Owner can appoint minters', severity: 'high', points: 18 },
-  { selector: '0x3092afd5', sig: 'removeMinter(address)', capability: 'Owner can appoint minters', severity: 'high', points: 18 },
-  { selector: '0xaa20e1e4', sig: 'updateMasterMinter(address)', capability: 'Owner can appoint minters', severity: 'high', points: 18 },
-  { selector: '0xad38bf22', sig: 'updateBlacklister(address)', capability: 'Owner can appoint who may blacklist', severity: 'critical', points: 25 },
-  { selector: '0x554bab3c', sig: 'updatePauser(address)', capability: 'Owner can appoint who may pause transfers', severity: 'high', points: 18 },
-  { selector: '0xc0246668', sig: 'excludeFromFees(address,bool)', capability: 'Owner can exempt addresses from fees', severity: 'medium', points: 10 },
+  { selector: '0x3659cfe6', sig: 'upgradeTo(address)', capability: 'Contract code can be replaced by the owner', severity: 'critical', points: 40, family: 'CODE_REPLACEMENT' },
+  { selector: '0x4f1ef286', sig: 'upgradeToAndCall(address,bytes)', capability: 'Contract code can be replaced by the owner', severity: 'critical', points: 40, family: 'CODE_REPLACEMENT' },
+  { selector: '0x404e5129', sig: 'blacklist(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x153b0d1e', sig: 'setBlacklist(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x44337ea1', sig: 'addToBlacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x0ecb93c0', sig: 'addBlackList(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x5cd8c072', sig: 'setBlackListed(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x8d1fdf2f', sig: 'freeze(address)', capability: 'Owner can freeze wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0xac869cd8', sig: 'setFrozen(address,bool)', capability: 'Owner can freeze wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0xb2a02ff1', sig: 'seize(address,address,uint256)', capability: 'Owner can seize holder tokens', severity: 'critical', points: 45, family: 'SEIZE' },
+  { selector: '0x79cc6790', sig: 'burnFrom(address,uint256)', capability: 'Tokens can be burned from a wallet by an approved party', severity: 'medium', points: 8, family: 'SEIZE' },
+  { selector: '0x8456cb59', sig: 'pause()', capability: 'Owner can pause all transfers', severity: 'critical', points: 25, family: 'HALT' },
+  { selector: '0x16c38b3c', sig: 'setPaused(bool)', capability: 'Owner can pause all transfers', severity: 'critical', points: 25, family: 'HALT' },
+  { selector: '0xc2e5ec04', sig: 'setTradingEnabled(bool)', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20, family: 'HALT' },
+  { selector: '0x8a8c523c', sig: 'enableTrading()', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20, family: 'HALT' },
+  { selector: '0x379ba1d9', sig: 'setTradingStatus(bool)', capability: 'Owner controls whether trading is enabled', severity: 'high', points: 20, family: 'HALT' },
+  { selector: '0x40c10f19', sig: 'mint(address,uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0xa0712d68', sig: 'mint(uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0x4e6ec247', sig: '_mint(address,uint256)', capability: 'New tokens can be minted', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0x0b78f9c0', sig: 'setFees(uint256,uint256)', capability: 'Owner can change buy/sell fees', severity: 'medium', points: 12, family: 'ECONOMICS' },
+  { selector: '0x69fe0e2d', sig: 'setFee(uint256)', capability: 'Owner can change fees', severity: 'medium', points: 12, family: 'ECONOMICS' },
+  { selector: '0xc647b20e', sig: 'setTaxes(uint256,uint256)', capability: 'Owner can change taxes', severity: 'medium', points: 12, family: 'ECONOMICS' },
+  { selector: '0xdc1052e2', sig: 'setBuyTax(uint256)', capability: 'Owner can change buy tax', severity: 'medium', points: 12, family: 'ECONOMICS' },
+  { selector: '0x8cd09d50', sig: 'setSellTax(uint256)', capability: 'Owner can change sell tax', severity: 'medium', points: 15, family: 'ECONOMICS' },
+  { selector: '0xec28438a', sig: 'setMaxTxAmount(uint256)', capability: 'Owner can cap transaction size', severity: 'high', points: 18, family: 'LIMITS' },
+  { selector: '0x27a14fc2', sig: 'setMaxWalletAmount(uint256)', capability: 'Owner can cap wallet size', severity: 'medium', points: 12, family: 'LIMITS' },
+  { selector: '0x5d0044ca', sig: 'setMaxWallet(uint256)', capability: 'Owner can cap wallet size', severity: 'medium', points: 12, family: 'LIMITS' },
+  { selector: '0xdb2e21bc', sig: 'emergencyWithdraw()', capability: 'Owner can withdraw contract balance', severity: 'high', points: 20, family: 'WITHDRAWAL' },
+  { selector: '0x3ccfd60b', sig: 'withdraw()', capability: 'Owner can withdraw contract balance', severity: 'medium', points: 10, family: 'WITHDRAWAL' },
+  { selector: '0x57376198', sig: 'rescueTokens(address,uint256)', capability: 'Owner can remove tokens held by the contract', severity: 'medium', points: 10, family: 'WITHDRAWAL' },
+  { selector: '0x9e281a98', sig: 'withdrawToken(address,uint256)', capability: 'Owner can remove tokens held by the contract', severity: 'medium', points: 10, family: 'WITHDRAWAL' },
+  { selector: '0xf9f92be4', sig: 'blacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0xd01dd6d2', sig: 'setBlacklisted(address,bool)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0x1a895266', sig: 'unBlacklist(address)', capability: 'Owner can blacklist wallets', severity: 'critical', points: 30, family: 'FREEZE' },
+  { selector: '0xfe575a87', sig: 'isBlacklisted(address)', capability: 'Contract maintains a blacklist', severity: 'high', points: 20, family: 'FREEZE' },
+  { selector: '0x4e44d956', sig: 'configureMinter(address,uint256)', capability: 'Owner can appoint minters', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0x3092afd5', sig: 'removeMinter(address)', capability: 'Owner can appoint minters', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0xaa20e1e4', sig: 'updateMasterMinter(address)', capability: 'Owner can appoint minters', severity: 'high', points: 18, family: 'MINT' },
+  { selector: '0xad38bf22', sig: 'updateBlacklister(address)', capability: 'Owner can appoint who may blacklist', severity: 'critical', points: 25, family: 'FREEZE' },
+  { selector: '0x554bab3c', sig: 'updatePauser(address)', capability: 'Owner can appoint who may pause transfers', severity: 'high', points: 18, family: 'HALT' },
+  { selector: '0xc0246668', sig: 'excludeFromFees(address,bool)', capability: 'Owner can exempt addresses from fees', severity: 'medium', points: 10, family: 'ECONOMICS' },
   { selector: '0x2f2ff15d', sig: 'grantRole(bytes32,address)', capability: 'Privileges are role-based, so owner() alone does not describe who is in control', severity: 'info', points: 0 },
   { selector: '0xd547741f', sig: 'revokeRole(bytes32,address)', capability: 'Privileges are role-based, so owner() alone does not describe who is in control', severity: 'info', points: 0 },
   { selector: '0x8da5cb5b', sig: 'owner()', capability: 'Contract has an owner', severity: 'info', points: 0 },
@@ -141,7 +141,17 @@ function analyzeBytecode(bytecode) {
   const privileges = [];
   const standardInterface = [];
   const seenCapabilities = new Set();
-  let score = 0;
+
+  // Score once per CONCERN, not once per function.
+  //
+  // A contract can express one power through several functions - blacklist(),
+  // updateBlacklister() and isBlacklisted() are three ways of saying "this
+  // token can freeze wallets". Scoring each of them separately triple-counts
+  // a single fact and pushes ordinary centralised tokens to the top of the
+  // scale, where they become indistinguishable from outright scams.
+  //
+  // So: take the highest points within each family, and add the families.
+  const familyMax = new Map();
 
   for (const selector of selectors) {
     const entry = SELECTOR_MAP.get(selector);
@@ -152,20 +162,30 @@ function analyzeBytecode(bytecode) {
       continue;
     }
 
-    // Several signatures map to the same capability (projects spell things
-    // differently). Count each capability once so a contract with three
-    // blacklist variants is not scored three times.
-    if (seenCapabilities.has(entry.capability)) continue;
-    seenCapabilities.add(entry.capability);
+    if (!seenCapabilities.has(entry.capability)) {
+      seenCapabilities.add(entry.capability);
+      privileges.push({
+        capability: entry.capability,
+        severity: entry.severity,
+        signature: entry.sig,
+        selector,
+        family: entry.family || null
+      });
+    }
 
-    privileges.push({
-      capability: entry.capability,
-      severity: entry.severity,
-      signature: entry.sig,
-      selector
-    });
-    score += entry.points;
+    const family = entry.family || entry.capability;
+    if (!familyMax.has(family) || familyMax.get(family) < entry.points) {
+      familyMax.set(family, entry.points);
+    }
   }
+
+  let score = 0;
+  const families = [];
+  for (const [family, points] of familyMax) {
+    score += points;
+    families.push({ family, points });
+  }
+  families.sort((a, b) => b.points - a.points);
 
   const order = { critical: 0, high: 1, medium: 2 };
   privileges.sort((a, b) => order[a.severity] - order[b.severity]);
@@ -174,6 +194,7 @@ function analyzeBytecode(bytecode) {
 
   return {
     privileges,
+    families,
     standardInterface,
     riskScore: score,
     severity: severityFromScore(score),
