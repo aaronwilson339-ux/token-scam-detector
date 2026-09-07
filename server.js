@@ -64,7 +64,7 @@ app.use((req, res, next) => {
 // /health and /docs stay open to everyone - marketplaces and agents need
 // to read them before they can decide to buy anything.
 
-const publicRoutes = ['/health', '/docs'];
+const publicRoutes = ['/health', '/docs', '/demo/scan'];
 
 // x402 config. Everything comes from environment variables so no wallet
 // address or credential is ever committed to the repository.
@@ -606,17 +606,108 @@ app.post('/batch-analyze', async (req, res) => {
 // ============================================
 //
 // The source-based endpoints above can only judge contracts whose Solidity
-// was published. Most scam tokens never publish theirs. This endpoint reads
-// the deployed bytecode instead, so it works on any contract that exists.
+// was published. Most scam tokens never publish theirs. This reads deployed
+// bytecode instead, so it works on any contract that exists.
 //
 // It reports what the owner is ABLE to do rather than declaring "scam".
-// Plenty of legitimate tokens can mint; the useful, defensible output is the
-// list of privileges, and a score derived from them.
+// Plenty of legitimate tokens can mint; the defensible output is the list of
+// privileges and a score derived from them.
 
+/**
+ * Shared by the paid route and the free demo, so the two can never drift
+ * apart and start giving different answers for the same contract.
+ */
+async function runScan(contractAddress, chain) {
+  const contract = await fetchContract(contractAddress, chain);
+  const analysis = analyzeBytecode(contract.bytecode);
+
+  const notes = [];
+  let score = analysis.riskScore;
+
+  // An upgradeable proxy means today's bytecode is not a promise about
+  // tomorrow's. That outranks anything found inside the current code.
+  if (contract.proxy.isProxy) {
+    score += 25;
+    notes.push(
+      'This is an upgradeable proxy. The code behind it can be replaced, so ' +
+      'these findings describe the implementation deployed right now and ' +
+      'nothing more.'
+    );
+  }
+
+  // If owner() really is the zero address, the privileges below cannot be
+  // used by an owner. Worth a lot - but not everything, because privileges
+  // can also be granted through roles that bytecode alone cannot reveal.
+  if (contract.owner.renounced && analysis.privileges.length > 0) {
+    score = Math.round(score * 0.3);
+    notes.push(
+      'Ownership is renounced (owner() returns the zero address), so the ' +
+      'privileges listed cannot be used by an owner. This does not rule out ' +
+      'other privileged roles.'
+    );
+  }
+
+  if (contract.owner.hasOwner && !contract.owner.renounced) {
+    notes.push(`Ownership is active. Owner: ${contract.owner.owner}`);
+  }
+
+  if (analysis.privileges.length === 0 && !contract.proxy.isProxy) {
+    notes.push(
+      'No owner privileges of the kinds this scanner recognises were found.'
+    );
+  }
+
+  if (score > 100) score = 100;
+  const severity =
+    score >= 70 ? 'CRITICAL' :
+    score >= 45 ? 'HIGH' :
+    score >= 25 ? 'MEDIUM' :
+    score >= 10 ? 'LOW' : 'MINIMAL';
+
+  return {
+    contractAddress: contract.address,
+    chain: contract.chain,
+    analysisMethod: 'bytecode',
+    contract: {
+      bytecodeSize: contract.bytecodeSize,
+      analyzedCodeAt: contract.bytecodeSource,
+      isUpgradeableProxy: contract.proxy.isProxy,
+      implementation: contract.proxy.implementation,
+      hasOwner: contract.owner.hasOwner,
+      owner: contract.owner.owner,
+      ownershipRenounced: contract.owner.renounced,
+      totalSupply: contract.totalSupply
+    },
+    ownerPrivileges: analysis.privileges,
+    riskScore: score,
+    severity,
+    notes,
+    disclaimer:
+      'This reports capabilities found in deployed bytecode. It is not a ' +
+      'verdict on intent, and cannot see off-chain factors such as who holds ' +
+      'the supply or whether liquidity is locked. Do your own research.',
+    timestamp: new Date().toISOString()
+  };
+}
+
+function handleScanError(error, res) {
+  if (error instanceof ChainError) {
+    console.warn(`[SCAN] ${error.message}`);
+    return res.status(400).json({ error: 'Scan failed', message: error.message });
+  }
+  console.error(`[ERROR] Scan: ${error.message}`);
+  return res.status(502).json({
+    error: 'Scan failed',
+    message: NODE_ENV === 'development'
+      ? error.message
+      : 'Could not read the contract from the chain'
+  });
+}
+
+// ---- Paid route -----------------------------------------------------
 app.post('/scan', async (req, res) => {
   try {
     const { contractAddress, chain = 'ethereum' } = req.body || {};
-
     if (!contractAddress) {
       return res.status(400).json({
         error: 'Missing required field',
@@ -624,88 +715,52 @@ app.post('/scan', async (req, res) => {
         optional: { chain: 'ethereum | base | bsc | polygon | arbitrum' }
       });
     }
-
-    const contract = await fetchContract(contractAddress, chain);
-    const analysis = analyzeBytecode(contract.bytecode);
-
-    const notes = [];
-    let score = analysis.riskScore;
-
-    // An upgradeable proxy means today's bytecode is not a promise about
-    // tomorrow's. That outranks anything found inside the current code.
-    if (contract.proxy.isProxy) {
-      score += 25;
-      notes.push(
-        'This is an upgradeable proxy. The code behind it can be replaced, so ' +
-        'these findings describe the implementation deployed right now and ' +
-        'nothing more.'
-      );
-    }
-
-    // If owner() really is the zero address, the owner-only privileges below
-    // cannot be exercised by an owner. Worth a lot - but not everything,
-    // because a contract can grant privileges through roles other than owner().
-    if (contract.owner.renounced && analysis.privileges.length > 0) {
-      score = Math.round(score * 0.3);
-      notes.push(
-        'Ownership is renounced (owner() returns the zero address), so the ' +
-        'privileges listed cannot be used by an owner. Note this does not rule ' +
-        'out other privileged roles, which bytecode alone cannot fully reveal.'
-      );
-    }
-
-    if (contract.owner.hasOwner && !contract.owner.renounced) {
-      notes.push(`Ownership is active. Owner: ${contract.owner.owner}`);
-    }
-
-    if (analysis.privileges.length === 0 && !contract.proxy.isProxy) {
-      notes.push(
-        'No owner privileges of the kinds this scanner recognises were found ' +
-        'in the bytecode.'
-      );
-    }
-
-    if (score > 100) score = 100;
-    const severity =
-      score >= 70 ? 'CRITICAL' :
-      score >= 45 ? 'HIGH' :
-      score >= 25 ? 'MEDIUM' :
-      score >= 10 ? 'LOW' : 'MINIMAL';
-
-    res.json({
-      contractAddress: contract.address,
-      chain: contract.chain,
-      analysisMethod: 'bytecode',
-      contract: {
-        bytecodeSize: contract.bytecodeSize,
-        analyzedCodeAt: contract.bytecodeSource,
-        isUpgradeableProxy: contract.proxy.isProxy,
-        implementation: contract.proxy.implementation,
-        hasOwner: contract.owner.hasOwner,
-        owner: contract.owner.owner,
-        ownershipRenounced: contract.owner.renounced,
-        totalSupply: contract.totalSupply
-      },
-      ownerPrivileges: analysis.privileges,
-      riskScore: score,
-      severity,
-      notes,
-      disclaimer:
-        'This reports capabilities found in deployed bytecode. It is not a ' +
-        'verdict on intent, and cannot see off-chain factors such as who holds ' +
-        'the supply or whether liquidity is locked. Do your own research.',
-      timestamp: new Date().toISOString()
-    });
+    res.json(await runScan(contractAddress, chain));
   } catch (error) {
-    if (error instanceof ChainError) {
-      console.warn(`[SCAN] ${error.message}`);
-      return res.status(400).json({ error: 'Scan failed', message: error.message });
+    handleScanError(error, res);
+  }
+});
+
+// ---- Free demo ------------------------------------------------------
+// A shop window: anyone can try the scanner a few times before deciding to
+// pay for it. Deliberately generous with the result and stingy with the
+// quota, because a demo that hides the output does not sell anything.
+const demoLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Demo limit reached',
+    message: 'The free demo allows 10 scans per hour. The paid /scan endpoint has no such limit.',
+    paidEndpoint: 'POST /scan'
+  },
+  // The owner's own key skips the demo quota, for testing.
+  skip: (req) => Boolean(API_KEY && req.headers['x-api-key'] === API_KEY)
+});
+
+app.get('/demo/scan', demoLimiter, async (req, res) => {
+  try {
+    const address = req.query.address;
+    const chain = req.query.chain || 'base';
+
+    if (!address) {
+      return res.status(400).json({
+        error: 'Missing address',
+        usage: '/demo/scan?address=0x...&chain=base',
+        example: '/demo/scan?address=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913&chain=base',
+        chains: ['ethereum', 'base', 'bsc', 'polygon', 'arbitrum']
+      });
     }
-    console.error(`[ERROR] Scan endpoint: ${error.message}`);
-    res.status(502).json({
-      error: 'Scan failed',
-      message: NODE_ENV === 'development' ? error.message : 'Could not read the contract from the chain'
-    });
+
+    const result = await runScan(address, chain);
+    result.demo = {
+      note: 'Free demo, limited to 10 scans per hour. POST /scan has no limit.',
+      paidEndpoint: 'POST /scan'
+    };
+    res.json(result);
+  } catch (error) {
+    handleScanError(error, res);
   }
 });
 
@@ -726,6 +781,21 @@ app.get('/docs', (req, res) => {
         method: 'GET',
         description: 'Check if API is running',
         requiresAuth: false
+      },
+      '/demo/scan': {
+        method: 'GET',
+        description: 'FREE DEMO - scan any deployed contract by address, no payment or key needed. Limited to 10 scans per hour. Works on unverified contracts.',
+        requiresAuth: false,
+        usage: '/demo/scan?address=0x...&chain=base'
+      },
+      '/scan': {
+        method: 'POST',
+        description: 'Reads deployed bytecode and reports what the contract owner is able to do - mint, blacklist, pause, change fees, or replace the code. Works on UNVERIFIED contracts. Needs only an address.',
+        requiresAuth: true,
+        body: {
+          contractAddress: 'string (required)',
+          chain: 'string - ethereum/base/bsc/polygon/arbitrum (optional, default: ethereum)'
+        }
       },
       '/analyze': {
         method: 'POST',
